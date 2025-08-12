@@ -1,7 +1,23 @@
-2025-08-12 00:54:18,745 - scraper_optimized - INFO - 📊 Organized 3 sections into 2 unique courses
-2025-08-12 00:54:18,748 - scraper_optimized - INFO - 💾 Saving 1 courses to /var/folders/mn/5fylbrm10lgccyd8xqnr0cgm0000gn/T/tmpsxb4mhc7/test.csv...
-2025-08-12 00:54:18,748 - scraper_optimized - INFO - 💾 Saving 1 courses to /var/folders/mn/5fylbrm10lgccyd8xqnr0cgm0000gn/T/tmphift09h0/test.json...
-2025-08-12 00:54:18,749 - scraper_optimized - INFO - 💾 Saving 1 courses to /var/folders/mn/5fylbrm10lgccyd8xqnr0cgm0000gn/T/tmp772cj9_k/test.jsonl...
-2025-08-12 00:54:18,751 - scraper_optimized - INFO - 📊 Organized 0 sections into 0 unique courses
-2025-08-12 00:54:18,751 - scraper_optimized - INFO - 📊 Organized 1 sections into 0 unique courses
-2025-08-12 00:54:18,756 - scraper_optimized - INFO - 📊 Organized 100 sections into 10 unique courses
+2025-08-12 01:29:59,447 - scraper_optimized - INFO - 🚀 Starting Optimized LionPath scraping...
+2025-08-12 01:29:59,447 - scraper_optimized - INFO - 📚 Getting all subject codes...
+2025-08-12 01:30:04,355 - scraper_optimized - INFO - Found 378 subjects
+2025-08-12 01:30:04,355 - scraper_optimized - INFO - Limited to first 1 subjects for testing
+2025-08-12 01:30:04,355 - scraper_optimized - INFO - 🏃‍♂️ Starting parallel subject scraping...
+2025-08-12 01:30:08,574 - scraper_optimized - INFO - ✅ A-I: 4 UP sections
+2025-08-12 01:30:08,575 - scraper_optimized - INFO - 📊 Subject scraping complete: 4 total sections found
+2025-08-12 01:30:08,575 - scraper_optimized - INFO - 📊 Organizing sections by course...
+2025-08-12 01:30:08,575 - scraper_optimized - INFO - 📊 Organized 4 sections into 4 unique courses
+2025-08-12 01:30:08,575 - scraper_optimized - INFO - 🔍 Extracting course details for 4 unique courses...
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - ✅ Course enhancement complete: 4 courses processed
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - 📊 OPTIMIZED SCRAPING STATISTICS
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - ============================================================
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - ⏱️  Total time: 0:00:14.995313
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - 📚 Subjects processed: 1/378
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - 🎓 Unique courses: 4
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - 📖 Total sections: 4
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - 🔍 Detailed sections: 0
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - ❌ Failed subjects: 0
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - ❌ Failed details: 0
+2025-08-12 01:30:14,442 - scraper_optimized - INFO - ⚡ Rate: 0.27 sections/second
+2025-08-12 01:30:14,443 - scraper_optimized - INFO - 📊 Avg sections per course: 1.00
+2025-08-12 01:30:14,443 - scraper_optimized - INFO - 💾 Estimated data savings: -100.0%

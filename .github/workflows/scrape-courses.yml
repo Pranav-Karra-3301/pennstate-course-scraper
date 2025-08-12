@@ -97,8 +97,14 @@ jobs:
         # Create necessary directories
         mkdir -p data logs artifacts
         
-        # Test scraper import
-        python -c "from scraper_optimized import OptimizedLionPathScraper" || { echo "❌ Failed to import scraper"; exit 1; }
+        # Test scraper import - try comprehensive first, fall back to optimized
+        if [ -f "scraper_comprehensive.py" ]; then
+          python -c "from scraper_comprehensive import ComprehensiveLionPathScraper" || { echo "⚠️ Comprehensive scraper import failed, trying optimized"; python -c "from scraper_optimized import OptimizedLionPathScraper" || { echo "❌ Failed to import any scraper"; exit 1; } }
+          echo "SCRAPER_TYPE=comprehensive" >> $GITHUB_ENV
+        else
+          python -c "from scraper_optimized import OptimizedLionPathScraper" || { echo "❌ Failed to import scraper"; exit 1; }
+          echo "SCRAPER_TYPE=optimized" >> $GITHUB_ENV
+        fi
         
         echo "✅ Pre-flight checks passed"
         echo "status=success" >> $GITHUB_OUTPUT
@@ -152,7 +158,16 @@ jobs:
         while [ $attempt -le $max_attempts ] && [ "$scrape_success" = "false" ]; do
           echo "📊 Scraping attempt $attempt of $max_attempts..."
           
-          if timeout 5400 python scraper_optimized.py \
+          # Choose scraper based on availability
+          if [ -f "scraper_comprehensive.py" ]; then
+            scraper_script="scraper_comprehensive.py"
+            echo "Using comprehensive scraper for ALL data extraction"
+          else
+            scraper_script="scraper_optimized.py"
+            echo "Using optimized scraper"
+          fi
+          
+          if timeout 5400 python ${scraper_script} \
             --output "${output_file}" \
             --format jsonl \
             --campus UP \
