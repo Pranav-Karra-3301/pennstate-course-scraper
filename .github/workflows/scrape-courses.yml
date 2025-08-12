@@ -1,0 +1,200 @@
+name: Weekly Course Scraping
+
+on:
+  schedule:
+    # Run every Sunday at 6 AM UTC (1 AM EST, 10 PM PST Sat)
+    - cron: '0 6 * * 0'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  scrape-courses:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Run course scraper
+      id: scrape
+      run: |
+        echo "Starting course scrape at $(date)"
+        start_time=$(date +%s)
+        
+        # Run the scraper with production settings
+        python scraper.py \
+          --output "data/psu_courses_$(date +%Y%m%d).jsonl" \
+          --format jsonl \
+          --campus UP \
+          --max-workers 12 \
+          --max-detail-workers 40 \
+          --rate-limit 15 \
+          --retry-attempts 3 > scrape_output.log 2>&1
+        
+        end_time=$(date +%s)
+        duration=$((end_time - start_time))
+        
+        # Extract statistics from log
+        total_courses=$(grep -o "Total courses: [0-9]*" scrape_output.log | grep -o "[0-9]*" | tail -1 || echo "0")
+        detailed_courses=$(grep -o "Detailed courses: [0-9]*" scrape_output.log | grep -o "[0-9]*" | tail -1 || echo "0")
+        subjects_processed=$(grep -o "Subjects processed: [0-9]*" scrape_output.log | grep -o "[0-9]*" | tail -1 || echo "0")
+        failed_subjects=$(grep -o "Failed subjects: [0-9]*" scrape_output.log | grep -o "[0-9]*" | tail -1 || echo "0")
+        
+        # Calculate rate
+        if [ "$duration" -gt 0 ] && [ "$total_courses" -gt 0 ]; then
+          rate=$(echo "scale=2; $total_courses / $duration" | bc)
+        else
+          rate="0"
+        fi
+        
+        # Store outputs
+        echo "duration=$duration" >> $GITHUB_OUTPUT
+        echo "total_courses=$total_courses" >> $GITHUB_OUTPUT
+        echo "detailed_courses=$detailed_courses" >> $GITHUB_OUTPUT
+        echo "subjects_processed=$subjects_processed" >> $GITHUB_OUTPUT
+        echo "failed_subjects=$failed_subjects" >> $GITHUB_OUTPUT
+        echo "rate=$rate" >> $GITHUB_OUTPUT
+        echo "filename=psu_courses_$(date +%Y%m%d).jsonl" >> $GITHUB_OUTPUT
+        echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+        
+        # Create data directory if it doesn't exist
+        mkdir -p data
+        
+        # Move the output file to data directory if it's not already there
+        if [ -f "psu_courses_$(date +%Y%m%d).jsonl" ]; then
+          mv "psu_courses_$(date +%Y%m%d).jsonl" "data/"
+        fi
+        
+        echo "Scraping completed in $duration seconds"
+        echo "Total courses: $total_courses"
+        echo "Courses with details: $detailed_courses"
+        echo "Rate: $rate courses/second"
+    
+    - name: Create summary report
+      run: |
+        cat > scrape_summary.md << EOF
+        # Course Scraping Summary - ${{ steps.scrape.outputs.date }}
+        
+        ## 📊 Statistics
+        
+        - **Date**: ${{ steps.scrape.outputs.date }}
+        - **Duration**: ${{ steps.scrape.outputs.duration }} seconds ($(($${{ steps.scrape.outputs.duration }} / 60)) minutes)
+        - **Total Courses**: ${{ steps.scrape.outputs.total_courses }}
+        - **Detailed Courses**: ${{ steps.scrape.outputs.detailed_courses }}
+        - **Subjects Processed**: ${{ steps.scrape.outputs.subjects_processed }}
+        - **Failed Subjects**: ${{ steps.scrape.outputs.failed_subjects }}
+        - **Processing Rate**: ${{ steps.scrape.outputs.rate }} courses/second
+        
+        ## 📁 Output File
+        
+        - **Filename**: \`data/${{ steps.scrape.outputs.filename }}\`
+        - **Format**: JSONL (one course per line)
+        - **Campus**: University Park (UP)
+        - **Semester**: Fall 2025
+        
+        ## 🔍 Data Quality
+        
+        - **Detail Extraction Rate**: $(($${{ steps.scrape.outputs.detailed_courses }} * 100 / $${{ steps.scrape.outputs.total_courses }}))%
+        - **Success Rate**: $(((${{ steps.scrape.outputs.subjects_processed }} - ${{ steps.scrape.outputs.failed_subjects }}) * 100 / ${{ steps.scrape.outputs.subjects_processed }}))%
+        
+        ## 📝 Notes
+        
+        This automated scraping run was executed on GitHub Actions using respectful rate limiting and error handling. The data includes comprehensive course information such as enrollment numbers, schedules, descriptions, and requirements.
+        
+        ## 🤖 Automation Details
+        
+        - **Triggered**: Weekly schedule (Sundays 6 AM UTC)
+        - **Environment**: Ubuntu Latest (GitHub Actions)
+        - **Python Version**: 3.11
+        - **Rate Limiting**: 15 requests/second
+        - **Workers**: 12 subject workers, 40 detail workers
+        
+        ---
+        
+        Generated automatically by [Penn State Course Scraper](https://github.com/${{ github.repository }})
+        EOF
+    
+    - name: Configure Git
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+    
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: |
+          📊 Weekly course data update - ${{ steps.scrape.outputs.date }}
+          
+          - Total courses: ${{ steps.scrape.outputs.total_courses }}
+          - Processing time: ${{ steps.scrape.outputs.duration }}s
+          - Rate: ${{ steps.scrape.outputs.rate }} courses/sec
+        title: "📊 Course Data Update - ${{ steps.scrape.outputs.date }}"
+        body: |
+          ## Weekly Course Scraping Results
+          
+          This automated PR contains the latest course data scraped from Penn State LionPath.
+          
+          ### 📈 Performance Metrics
+          
+          | Metric | Value |
+          |--------|-------|
+          | **Total Courses** | ${{ steps.scrape.outputs.total_courses }} |
+          | **Processing Time** | ${{ steps.scrape.outputs.duration }}s (${{ steps.scrape.outputs.duration / 60 }}m) |
+          | **Processing Rate** | ${{ steps.scrape.outputs.rate }} courses/second |
+          | **Detailed Courses** | ${{ steps.scrape.outputs.detailed_courses }} |
+          | **Success Rate** | ${{ steps.scrape.outputs.subjects_processed - steps.scrape.outputs.failed_subjects }}/${{ steps.scrape.outputs.subjects_processed }} subjects |
+          
+          ### 📁 Files Added
+          
+          - `data/${{ steps.scrape.outputs.filename }}` - Course data in JSONL format
+          - `scrape_summary.md` - Detailed summary report
+          
+          ### 🔍 Data Overview
+          
+          The scraped data includes:
+          - Course codes, titles, and descriptions
+          - Enrollment capacity and current enrollment
+          - Class schedules and locations
+          - Instructor information
+          - Prerequisites and requirements
+          - General Education attributes
+          
+          ### 🤖 Automation
+          
+          This data was collected using respectful scraping practices:
+          - Rate limited to 15 requests/second
+          - Comprehensive error handling and retries
+          - Focused on University Park campus
+          - Automated quality checks
+          
+          ---
+          
+          **Note**: This is an automated pull request generated by the weekly course scraping workflow.
+        branch: course-update-${{ steps.scrape.outputs.date }}
+        delete-branch: true
+        labels: |
+          automated
+          data-update
+          weekly-scrape
+    
+    - name: Upload scraping logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: scraping-logs-${{ steps.scrape.outputs.date }}
+        path: |
+          scrape_output.log
+          psu_scraper_enhanced.log
+        retention-days: 30
