@@ -303,56 +303,66 @@ jobs:
         # Validate JSON structure with detailed error reporting
         echo "📋 Validating JSONL format..."
         
-        # Use Python to validate the JSONL file
-        python3 -c "
-import json
-import sys
-
-filepath = '$output_file'
-try:
-    with open(filepath, 'r') as f:
-        lines = f.readlines()
-    
-    if not lines:
-        print('❌ File is empty')
-        sys.exit(1)
-    
-    valid_lines = 0
-    invalid_lines = []
-    
-    for i, line in enumerate(lines, 1):
-        try:
-            data = json.loads(line.strip())
-            if 'course' in data and 'sections' in data:
-                valid_lines += 1
-            else:
-                invalid_lines.append(i)
-        except json.JSONDecodeError:
-            invalid_lines.append(i)
-    
-    print(f'📊 Validation Results:')
-    print(f'  Total lines: {len(lines)}')
-    print(f'  Valid records: {valid_lines}')
-    print(f'  Invalid records: {len(invalid_lines)}')
-    
-    if invalid_lines:
-        print(f'❌ Invalid lines: {invalid_lines[:5]}')
-        sys.exit(1)
-    
-    if valid_lines == len(lines):
-        print(f'✅ All {valid_lines} records are valid!')
-        first = json.loads(lines[0])
-        c = first.get('course', {})
-        print(f\"📚 Sample: {c.get('course_code', 'N/A')} - {c.get('course_title', 'N/A')}\")
-    else:
-        rate = (valid_lines / len(lines)) * 100
-        if rate < 95:
-            print(f'⚠️ Only {rate:.1f}% records valid')
-            sys.exit(1)
-except Exception as e:
-    print(f'💥 Validation error: {e}')
-    sys.exit(1)
-        "
+        # Create temporary Python validation script using printf to avoid heredoc issues
+        printf '%s\n' \
+          'import json' \
+          'import sys' \
+          '' \
+          'def validate_jsonl(filepath):' \
+          '    try:' \
+          '        with open(filepath, "r") as f:' \
+          '            lines = f.readlines()' \
+          '        ' \
+          '        if not lines:' \
+          '            print("❌ File is empty")' \
+          '            sys.exit(1)' \
+          '        ' \
+          '        valid_lines = 0' \
+          '        invalid_lines = []' \
+          '        ' \
+          '        for i, line in enumerate(lines, 1):' \
+          '            try:' \
+          '                data = json.loads(line.strip())' \
+          '                if "course" in data and "sections" in data:' \
+          '                    valid_lines += 1' \
+          '                else:' \
+          '                    invalid_lines.append(i)' \
+          '            except json.JSONDecodeError:' \
+          '                invalid_lines.append(i)' \
+          '        ' \
+          '        print(f"📊 Validation Results:")' \
+          '        print(f"  Total lines: {len(lines)}")' \
+          '        print(f"  Valid records: {valid_lines}")' \
+          '        print(f"  Invalid records: {len(invalid_lines)}")' \
+          '        ' \
+          '        if invalid_lines:' \
+          '            print(f"❌ Invalid lines: {invalid_lines[:5]}")' \
+          '            sys.exit(1)' \
+          '        ' \
+          '        if valid_lines == len(lines):' \
+          '            print(f"✅ All {valid_lines} records are valid!")' \
+          '            first = json.loads(lines[0])' \
+          '            c = first.get("course", {})' \
+          '            print(f"📚 Sample: {c.get('"'"'course_code'"'"', '"'"'N/A'"'"')} - {c.get('"'"'course_title'"'"', '"'"'N/A'"'"')}")' \
+          '        else:' \
+          '            rate = (valid_lines / len(lines)) * 100' \
+          '            if rate < 95:' \
+          '                print(f"⚠️ Only {rate:.1f}% records valid")' \
+          '                sys.exit(1)' \
+          '    except Exception as e:' \
+          '        print(f"💥 Validation error: {e}")' \
+          '        sys.exit(1)' \
+          '' \
+          'if __name__ == "__main__":' \
+          '    if len(sys.argv) != 2:' \
+          '        print("Usage: python validate_jsonl.py <file>")' \
+          '        sys.exit(1)' \
+          '    validate_jsonl(sys.argv[1])' \
+          > /tmp/validate_jsonl.py
+        
+        # Execute the validation script
+        python3 /tmp/validate_jsonl.py "$output_file"
+        rm -f /tmp/validate_jsonl.py
         
         echo "validation_complete=true" >> $GITHUB_OUTPUT
         echo "✅ Output validation completed successfully"
@@ -362,55 +372,55 @@ except Exception as e:
       run: |
         set -euo pipefail
         
-        # Create comprehensive summary report
-        cat > scrape_summary.md << 'EOF'
-# Course Scraping Summary - ${{ steps.scrape.outputs.date }}
-
-## 📊 Statistics
-
-- **Date**: ${{ steps.scrape.outputs.datetime }}
-- **Duration**: ${{ steps.scrape.outputs.duration }} seconds
-- **Unique Courses**: ${{ steps.scrape.outputs.unique_courses }}
-- **Total Sections**: ${{ steps.scrape.outputs.total_sections }}
-- **Subjects Processed**: ${{ steps.scrape.outputs.subjects_processed }}/${{ steps.scrape.outputs.total_subjects }}
-- **Failed Subjects**: ${{ steps.scrape.outputs.failed_subjects }}
-- **Success Rate**: ${{ steps.scrape.outputs.success_rate }}%
-- **Processing Rate**: ${{ steps.scrape.outputs.sections_rate }} sections/second
-
-## 📁 Output File
-
-- **Filename**: `data/${{ steps.scrape.outputs.filename }}`
-- **Format**: JSONL (optimized structure)
-- **Size**: ${{ steps.scrape.outputs.file_size }} bytes
-- **Records**: ${{ steps.scrape.outputs.line_count }} course records
-- **Campus**: University Park (UP)
-- **Semester**: Fall 2025
-
-## 🔍 Data Quality
-
-- **Structure**: Optimized format separating course-level from section-level data
-- **Validation**: All records validated as proper JSON with required fields
-- **Completeness**: Comprehensive course and section details included
-
-## 📝 Run Details
-
-- **Trigger**: ${{ github.event_name == 'schedule' && 'Weekly schedule (Sundays 6 AM UTC)' || 'Manual trigger' }}
-- **Test Mode**: ${{ inputs.test_mode == 'true' && 'Yes' || 'No' }}
-- **Environment**: Ubuntu Latest (GitHub Actions)
-- **Python Version**: 3.11
-
-## 🤖 Automation
-
-This automated scraping run was executed with:
-- Respectful rate limiting (15 requests/second)
-- Comprehensive error handling and retries
-- Optimized data structure to reduce redundancy
-- Focus on University Park campus courses
-
----
-
-Generated automatically by [Penn State Course Scraper](https://github.com/${{ github.repository }})
-        EOF
+        # Create comprehensive summary report using echo to avoid YAML parsing issues
+        {
+          echo "# Course Scraping Summary - ${{ steps.scrape.outputs.date }}"
+          echo ""
+          echo "## 📊 Statistics"
+          echo ""
+          echo "• **Date**: ${{ steps.scrape.outputs.datetime }}"
+          echo "• **Duration**: ${{ steps.scrape.outputs.duration }} seconds"
+          echo "• **Unique Courses**: ${{ steps.scrape.outputs.unique_courses }}"
+          echo "• **Total Sections**: ${{ steps.scrape.outputs.total_sections }}"
+          echo "• **Subjects Processed**: ${{ steps.scrape.outputs.subjects_processed }}/${{ steps.scrape.outputs.total_subjects }}"
+          echo "• **Failed Subjects**: ${{ steps.scrape.outputs.failed_subjects }}"
+          echo "• **Success Rate**: ${{ steps.scrape.outputs.success_rate }}%"
+          echo "• **Processing Rate**: ${{ steps.scrape.outputs.sections_rate }} sections/second"
+          echo ""
+          echo "## 📁 Output File"
+          echo ""
+          echo "• **Filename**: \`data/${{ steps.scrape.outputs.filename }}\`"
+          echo "• **Format**: JSONL (optimized structure)"
+          echo "• **Size**: ${{ steps.scrape.outputs.file_size }} bytes"
+          echo "• **Records**: ${{ steps.scrape.outputs.line_count }} course records"
+          echo "• **Campus**: University Park (UP)"
+          echo "• **Semester**: Fall 2025"
+          echo ""
+          echo "## 🔍 Data Quality"
+          echo ""
+          echo "• **Structure**: Optimized format separating course-level from section-level data"
+          echo "• **Validation**: All records validated as proper JSON with required fields"
+          echo "• **Completeness**: Comprehensive course and section details included"
+          echo ""
+          echo "## 📝 Run Details"
+          echo ""
+          echo "• **Trigger**: ${{ github.event_name == 'schedule' && 'Weekly schedule (Sundays 6 AM UTC)' || 'Manual trigger' }}"
+          echo "• **Test Mode**: ${{ inputs.test_mode == 'true' && 'Yes' || 'No' }}"
+          echo "• **Environment**: Ubuntu Latest (GitHub Actions)"
+          echo "• **Python Version**: 3.11"
+          echo ""
+          echo "## 🤖 Automation"
+          echo ""
+          echo "This automated scraping run was executed with:"
+          echo "• Respectful rate limiting (15 requests/second)"
+          echo "• Comprehensive error handling and retries"
+          echo "• Optimized data structure to reduce redundancy"
+          echo "• Focus on University Park campus courses"
+          echo ""
+          echo "---"
+          echo ""
+          echo "Generated automatically by [Penn State Course Scraper](https://github.com/${{ github.repository }})"
+        } > scrape_summary.md
         
         echo "✅ Summary report created"
     
@@ -529,19 +539,19 @@ Generated automatically by [Penn State Course Scraper](https://github.com/${{ gi
         echo "- Run number: ${{ github.run_number }}"
         
         # Create failure summary for GitHub Actions
-        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-## ❌ Course Scraping Failed
-
-The course scraping workflow encountered an error.
-
-### Debug Information
-- **Run ID**: ${{ github.run_id }}
-- **Run Number**: ${{ github.run_number }}
-- **Trigger**: ${{ github.event_name }}
-- **Test Mode**: ${{ inputs.test_mode }}
-
-Please check the logs for more details.
-        EOF
+        {
+          echo "## ❌ Course Scraping Failed"
+          echo ""
+          echo "The course scraping workflow encountered an error."
+          echo ""
+          echo "### Debug Information"
+          echo "• **Run ID**: ${{ github.run_id }}"
+          echo "• **Run Number**: ${{ github.run_number }}"
+          echo "• **Trigger**: ${{ github.event_name }}"
+          echo "• **Test Mode**: ${{ inputs.test_mode }}"
+          echo ""
+          echo "Please check the logs for more details."
+        } >> $GITHUB_STEP_SUMMARY
     
     - name: Success notification
       if: success() && steps.create_pr.outputs.pull-request-number
@@ -550,19 +560,19 @@ Please check the logs for more details.
         echo "📋 Pull Request: #${{ steps.create_pr.outputs.pull-request-number }}"
         
         # Create success summary for GitHub Actions
-        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-## ✅ Course Scraping Successful
-
-Successfully scraped Penn State course data.
-
-### 📊 Results
-- **Courses**: ${{ steps.scrape.outputs.unique_courses }}
-- **Sections**: ${{ steps.scrape.outputs.total_sections }}
-- **Success Rate**: ${{ steps.scrape.outputs.success_rate }}%
-- **Pull Request**: #${{ steps.create_pr.outputs.pull-request-number }}
-
-### 📁 Output
-- **File**: `data/${{ steps.scrape.outputs.filename }}`
-- **Size**: ${{ steps.scrape.outputs.file_size }} bytes
-- **Records**: ${{ steps.scrape.outputs.line_count }}
-        EOF
+        {
+          echo "## ✅ Course Scraping Successful"
+          echo ""
+          echo "Successfully scraped Penn State course data."
+          echo ""
+          echo "### 📊 Results"
+          echo "• **Courses**: ${{ steps.scrape.outputs.unique_courses }}"
+          echo "• **Sections**: ${{ steps.scrape.outputs.total_sections }}"
+          echo "• **Success Rate**: ${{ steps.scrape.outputs.success_rate }}%"
+          echo "• **Pull Request**: #${{ steps.create_pr.outputs.pull-request-number }}"
+          echo ""
+          echo "### 📁 Output"
+          echo "• **File**: \`data/${{ steps.scrape.outputs.filename }}\`"
+          echo "• **Size**: ${{ steps.scrape.outputs.file_size }} bytes"
+          echo "• **Records**: ${{ steps.scrape.outputs.line_count }}"
+        } >> $GITHUB_STEP_SUMMARY

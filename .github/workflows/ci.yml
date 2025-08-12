@@ -133,34 +133,36 @@ jobs:
     
     - name: Test data structures
       run: |
-        python -c "
-from scraper_optimized import CourseInfo, SectionInfo, OptimizedCourseData
-course = CourseInfo(course_code='TEST 101')
-section = SectionInfo(section='001')
-data = OptimizedCourseData(course_info=course, sections=[section])
-print(f'✅ Data structures working: {data.get_section_count()} section(s)')
-        "
+        cat > /tmp/test_structures.py << 'EOF'
+        from scraper_optimized import CourseInfo, SectionInfo, OptimizedCourseData
+        course = CourseInfo(course_code='TEST 101')
+        section = SectionInfo(section='001')
+        data = OptimizedCourseData(course_info=course, sections=[section])
+        print(f'✅ Data structures working: {data.get_section_count()} section(s)')
+        EOF
+        python /tmp/test_structures.py
     
     - name: Test file I/O operations
       run: |
-        python -c "
-import tempfile
-import os
-from scraper_optimized import CourseInfo, SectionInfo, OptimizedCourseData, save_optimized_results
-
-# Create test data
-course = CourseInfo(course_code='TEST 101', course_title='Test Course')
-section = SectionInfo(section='001', class_capacity=30)
-data = {'TEST 101': OptimizedCourseData(course_info=course, sections=[section])}
-
-# Test saving
-with tempfile.NamedTemporaryFile(suffix='.jsonl', delete=False) as f:
-    save_optimized_results(data, f.name, 'jsonl')
-    assert os.path.exists(f.name), 'File not created'
-    size = os.path.getsize(f.name)
-    print(f'✅ File I/O working: {size} bytes written')
-    os.unlink(f.name)
-        "
+        cat > /tmp/test_io.py << 'EOF'
+        import tempfile
+        import os
+        from scraper_optimized import CourseInfo, SectionInfo, OptimizedCourseData, save_optimized_results
+        
+        # Create test data
+        course = CourseInfo(course_code='TEST 101', course_title='Test Course')
+        section = SectionInfo(section='001', class_capacity=30)
+        data = {'TEST 101': OptimizedCourseData(course_info=course, sections=[section])}
+        
+        # Test saving
+        with tempfile.NamedTemporaryFile(suffix='.jsonl', delete=False) as f:
+            save_optimized_results(data, f.name, 'jsonl')
+            assert os.path.exists(f.name), 'File not created'
+            size = os.path.getsize(f.name)
+            print(f'✅ File I/O working: {size} bytes written')
+            os.unlink(f.name)
+        EOF
+        python /tmp/test_io.py
     
     - name: Test scraper with limited scope
       run: |
