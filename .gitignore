@@ -93,13 +93,15 @@ logs/
 !psu_scraper_optimized.log
 
 # Project specific - Data files
+# Note: We allow JSONL files for GitHub Actions to commit
+# data/*.jsonl  # Commented out to allow workflow commits
 data/*.json
-data/*.jsonl
 data/*.csv
-# Keep example files
+# Keep example files and course data
 !data/example_*.jsonl
 !data/example_*.json
 !data/example_output.jsonl
+!data/psu_courses_*.jsonl  # Allow course data files
 
 # Temporary files
 *.tmp
