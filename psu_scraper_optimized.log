@@ -1,7 +1,77 @@
-2025-08-12 00:54:18,745 - scraper_optimized - INFO - 📊 Organized 3 sections into 2 unique courses
-2025-08-12 00:54:18,748 - scraper_optimized - INFO - 💾 Saving 1 courses to /var/folders/mn/5fylbrm10lgccyd8xqnr0cgm0000gn/T/tmpsxb4mhc7/test.csv...
-2025-08-12 00:54:18,748 - scraper_optimized - INFO - 💾 Saving 1 courses to /var/folders/mn/5fylbrm10lgccyd8xqnr0cgm0000gn/T/tmphift09h0/test.json...
-2025-08-12 00:54:18,749 - scraper_optimized - INFO - 💾 Saving 1 courses to /var/folders/mn/5fylbrm10lgccyd8xqnr0cgm0000gn/T/tmp772cj9_k/test.jsonl...
-2025-08-12 00:54:18,751 - scraper_optimized - INFO - 📊 Organized 0 sections into 0 unique courses
-2025-08-12 00:54:18,751 - scraper_optimized - INFO - 📊 Organized 1 sections into 0 unique courses
-2025-08-12 00:54:18,756 - scraper_optimized - INFO - 📊 Organized 100 sections into 10 unique courses
+2025-08-12 05:10:11,918 - __main__ - INFO - 🎓 Penn State LionPath Course Scraper - Optimized Data Structure
+2025-08-12 05:10:11,918 - __main__ - INFO - 📁 Output file: data/psu_courses_20250812.jsonl
+2025-08-12 05:10:11,918 - __main__ - INFO - 📊 Output format: jsonl
+2025-08-12 05:10:11,918 - __main__ - INFO - 🏫 Campus filter: UP
+2025-08-12 05:10:11,919 - __main__ - INFO - 🚀 Starting Optimized LionPath scraping...
+2025-08-12 05:10:11,919 - __main__ - INFO - 📚 Getting all subject codes...
+2025-08-12 05:10:16,425 - __main__ - INFO - Found 378 subjects
+2025-08-12 05:10:16,425 - __main__ - INFO - Limited to first 50 subjects for testing
+2025-08-12 05:10:16,425 - __main__ - INFO - 🏃‍♂️ Starting parallel subject scraping...
+2025-08-12 05:10:19,347 - __main__ - INFO - ✅ AA: 6 UP sections
+2025-08-12 05:10:20,111 - __main__ - INFO - ✅ ABE: 20 UP sections
+2025-08-12 05:10:20,615 - __main__ - INFO - ✅ A-I: 4 UP sections
+2025-08-12 05:10:22,163 - __main__ - INFO - ✅ ABIOL: 1 UP sections
+2025-08-12 05:10:22,562 - __main__ - INFO - ✅ ABSM: 18 UP sections
+2025-08-12 05:10:22,986 - __main__ - INFO - ✅ ACCT: 1 UP sections
+2025-08-12 05:10:23,274 - __main__ - INFO - ✅ ACS: 15 UP sections
+2025-08-12 05:10:24,029 - __main__ - INFO - ✅ ACCTG: 4 UP sections
+2025-08-12 05:10:25,177 - __main__ - INFO - ✅ ADTED: 13 UP sections
+2025-08-12 05:10:25,791 - __main__ - INFO - ✅ AE: 20 UP sections
+2025-08-12 05:10:26,155 - __main__ - INFO - ✅ AEPS: 20 UP sections
+2025-08-12 05:10:26,482 - __main__ - INFO - ✅ AEE: 18 UP sections
+2025-08-12 05:10:26,785 - __main__ - INFO - ✅ AED: 7 UP sections
+2025-08-12 05:10:27,312 - __main__ - INFO - ✅ AERSP: 8 UP sections
+2025-08-12 05:10:27,625 - __main__ - INFO - ✅ AFR: 20 UP sections
+2025-08-12 05:10:28,141 - __main__ - INFO - ✅ AG: 7 UP sections
+2025-08-12 05:10:28,340 - __main__ - INFO - ✅ AGBM: 20 UP sections
+2025-08-12 05:10:29,068 - __main__ - INFO - ✅ AGBIO: 7 UP sections
+2025-08-12 05:10:29,189 - __main__ - INFO - ✅ AGECO: 15 UP sections
+2025-08-12 05:10:29,919 - __main__ - INFO - ✅ AGCOM: 6 UP sections
+2025-08-12 05:10:30,559 - __main__ - INFO - ✅ AMD: 20 UP sections
+2025-08-12 05:10:30,562 - __main__ - INFO - ✅ AGSC: 13 UP sections
+2025-08-12 05:10:31,099 - __main__ - INFO - ✅ AIR: 20 UP sections
+2025-08-12 05:10:31,243 - __main__ - INFO - ✅ AGRO: 4 UP sections
+2025-08-12 05:10:32,230 - __main__ - INFO - ✅ AMST: 19 UP sections
+2025-08-12 05:10:32,494 - __main__ - INFO - ✅ ANSC: 7 UP sections
+2025-08-12 05:10:32,688 - __main__ - INFO - ✅ ANAT: 9 UP sections
+2025-08-12 05:10:33,636 - __main__ - INFO - ✅ APLNG: 20 UP sections
+2025-08-12 05:10:33,639 - __main__ - INFO - ✅ ANTH: 1 UP sections
+2025-08-12 05:10:33,725 - __main__ - INFO - ✅ ANSTH: 11 UP sections
+2025-08-12 05:10:33,956 - __main__ - INFO - ✅ ARCH: 20 UP sections
+2025-08-12 05:10:35,030 - __main__ - INFO - ✅ ART: 15 UP sections
+2025-08-12 05:10:35,406 - __main__ - INFO - ✅ ARAB: 7 UP sections
+2025-08-12 05:10:35,686 - __main__ - INFO - ✅ ARTSA: 20 UP sections
+2025-08-12 05:10:35,732 - __main__ - INFO - ✅ ARMY: 7 UP sections
+2025-08-12 05:10:36,456 - __main__ - INFO - ✅ ARTH: 6 UP sections
+2025-08-12 05:10:37,047 - __main__ - INFO - ✅ ASM: 20 UP sections
+2025-08-12 05:10:37,072 - __main__ - INFO - ✅ ASIA: 13 UP sections
+2025-08-12 05:10:37,963 - __main__ - INFO - ✅ AYFCE: 14 UP sections
+2025-08-12 05:10:38,717 - __main__ - INFO - ✅ ATHTR: 20 UP sections
+2025-08-12 05:10:39,451 - __main__ - INFO - ✅ ASTRO: 4 UP sections
+2025-08-12 05:10:39,540 - __main__ - INFO - ✅ BADM: 20 UP sections
+2025-08-12 05:10:40,209 - __main__ - INFO - ✅ BBH: 11 UP sections
+2025-08-12 05:10:40,371 - __main__ - INFO - ✅ BAN: 1 UP sections
+2025-08-12 05:10:40,914 - __main__ - INFO - ✅ BA: 8 UP sections
+2025-08-12 05:10:41,285 - __main__ - INFO - ✅ BCHEM: 20 UP sections
+2025-08-12 05:10:41,286 - __main__ - INFO - 📊 Subject scraping complete: 560 total sections found
+2025-08-12 05:10:41,286 - __main__ - INFO - 📊 Organizing sections by course...
+2025-08-12 05:10:41,287 - __main__ - INFO - 📊 Organized 560 sections into 115 unique courses
+2025-08-12 05:10:41,287 - __main__ - INFO - 🔍 Extracting course details for 115 unique courses...
+2025-08-12 05:10:44,392 - __main__ - INFO - 🔍 Course enhancement progress: 50/115
+2025-08-12 05:10:47,442 - __main__ - INFO - 🔍 Course enhancement progress: 100/115
+2025-08-12 05:10:48,403 - __main__ - INFO - ✅ Course enhancement complete: 115 courses processed
+2025-08-12 05:10:48,404 - __main__ - INFO - 📊 OPTIMIZED SCRAPING STATISTICS
+2025-08-12 05:10:48,404 - __main__ - INFO - ============================================================
+2025-08-12 05:10:48,404 - __main__ - INFO - ⏱️  Total time: 0:00:36.484554
+2025-08-12 05:10:48,404 - __main__ - INFO - 📚 Subjects processed: 50/378
+2025-08-12 05:10:48,404 - __main__ - INFO - 🎓 Unique courses: 115
+2025-08-12 05:10:48,404 - __main__ - INFO - 📖 Total sections: 560
+2025-08-12 05:10:48,404 - __main__ - INFO - 🔍 Detailed sections: 0
+2025-08-12 05:10:48,404 - __main__ - INFO - ❌ Failed subjects: 0
+2025-08-12 05:10:48,404 - __main__ - INFO - ❌ Failed details: 0
+2025-08-12 05:10:48,404 - __main__ - INFO - ⚡ Rate: 15.35 sections/second
+2025-08-12 05:10:48,404 - __main__ - INFO - 📊 Avg sections per course: 4.87
+2025-08-12 05:10:48,404 - __main__ - INFO - 💾 Estimated data savings: -20.5%
+2025-08-12 05:10:48,404 - __main__ - INFO - 💾 Saving 115 courses to data/psu_courses_20250812.jsonl...
+2025-08-12 05:10:48,440 - __main__ - INFO - ✅ Optimized scraping completed successfully!
+2025-08-12 05:10:48,440 - __main__ - INFO - 💾 Results saved to: data/psu_courses_20250812.jsonl
