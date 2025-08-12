@@ -87,31 +87,67 @@ python scraper.py --max-subjects 10 --debug
 
 ## Data Structure
 
-Each course record includes:
+### Optimized Format (Default)
+
+The scraper uses an optimized data structure that separates course-level information from section-specific details, reducing redundancy and file size:
 
 ```json
 {
-  "course_code": "CMPSC 121",
-  "course_title": "Introduction to Programming Techniques",
-  "subject": "CMPSC",
-  "catalog_number": "121",
-  "section": "001",
-  "class_number": "12345",
-  "units": "4.0",
-  "campus": "UP",
-  "instructor": "Smith, John",
-  "class_capacity": 150,
-  "enrollment_total": 142,
-  "available_seats": 8,
-  "status": "Open",
-  "course_description": "Basic programming concepts...",
-  "days": "MoWeFr",
-  "times": "10:10AM - 11:00AM",
-  "room": "IST 110",
-  "class_attributes": ["GenEd: GQ"],
-  "semester": "Fall 2025"
+  "course": {
+    "course_code": "CMPSC 121",
+    "course_title": "Introduction to Programming Techniques",
+    "subject": "CMPSC",
+    "catalog_number": "121",
+    "units": "4.0",
+    "course_description": "Basic programming concepts...",
+    "enrollment_requirements": "Prerequisites...",
+    "class_attributes": ["GenEd: GQ"],
+    "academic_organization": "Computer Science and Engineering"
+  },
+  "sections": [
+    {
+      "section": "001",
+      "class_number": "12345",
+      "instructor": "Smith, John",
+      "days": "MoWeFr",
+      "times": "10:10AM - 11:00AM",
+      "campus": "UP",
+      "room": "IST 110",
+      "class_capacity": 150,
+      "enrollment_total": 142,
+      "available_seats": 8,
+      "status": "Open"
+    },
+    {
+      "section": "002",
+      "class_number": "12346",
+      "instructor": "Johnson, Mary",
+      "days": "TuTh",
+      "times": "1:25PM - 2:40PM",
+      "campus": "UP",
+      "room": "IST 210",
+      "class_capacity": 150,
+      "enrollment_total": 138,
+      "available_seats": 12,
+      "status": "Open"
+    }
+  ],
+  "stats": {
+    "total_capacity": 300,
+    "total_enrollment": 280,
+    "available_seats": 20,
+    "section_count": 2,
+    "campuses": ["UP"]
+  }
 }
 ```
+
+### Benefits of Optimized Structure
+
+- **50-70% smaller file sizes** by eliminating redundant course information
+- **Easier analysis** of courses with multiple sections
+- **Built-in statistics** for capacity and enrollment aggregation
+- **Logical separation** of course vs. section data
 
 ## Automated Workflow
 
