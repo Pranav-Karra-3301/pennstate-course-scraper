@@ -35,9 +35,19 @@ A high-performance course scraper for Penn State's LionPath system that extracts
 ### Installation
 
 ```bash
-git clone <this-repo>
-cd <repo-directory>
+git clone https://github.com/yourusername/psu-course-scraper.git
+cd psu-course-scraper
 pip install -r requirements.txt
+```
+
+### Testing
+
+```bash
+# Quick test with limited data
+python test_scraper.py
+
+# Manual test with 5 subjects
+python scraper.py --max-subjects 5 --debug
 ```
 
 ### Basic Usage
