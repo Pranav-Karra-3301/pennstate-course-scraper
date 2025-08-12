@@ -424,86 +424,46 @@ jobs:
         
         echo "✅ Summary report created"
     
-    - name: Configure Git
+    - name: Commit and Push Data
       if: steps.validate.outputs.validation_complete == 'true'
+      id: commit_push
       run: |
         set -euo pipefail
         
-        # Configure git with error handling
-        git config --local user.email "action@github.com" || {
-          echo "⚠️ Failed to set git email, trying global config"
-          git config --global user.email "action@github.com"
-        }
+        # Configure git
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Bot"
         
-        git config --local user.name "GitHub Action Bot" || {
-          echo "⚠️ Failed to set git name, trying global config"
-          git config --global user.name "GitHub Action Bot"
-        }
+        # Add the new data files
+        git add data/*.jsonl scrape_summary.md || true
         
-        # Verify configuration
-        git config --get user.email || { echo "❌ Git email not configured"; exit 1; }
-        git config --get user.name || { echo "❌ Git name not configured"; exit 1; }
+        # Check if there are changes to commit
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+          echo "changes_made=false" >> $GITHUB_OUTPUT
+        else
+          # Commit the changes
+          git commit -m "📊 Course data update - ${{ steps.scrape.outputs.date }}
+
+        - Unique courses: ${{ steps.scrape.outputs.unique_courses }}
+        - Total sections: ${{ steps.scrape.outputs.total_sections }}
+        - Processing time: ${{ steps.scrape.outputs.duration }}s
+        - Success rate: ${{ steps.scrape.outputs.success_rate }}%
         
-        echo "✅ Git configured successfully"
-    
-    - name: Create Pull Request
-      if: steps.validate.outputs.validation_complete == 'true'
-      id: create_pr
-      uses: peter-evans/create-pull-request@v5
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        commit-message: |
-          📊 Course data update - ${{ steps.scrape.outputs.date }}
+        Automated update from GitHub Actions workflow" || {
+            echo "Failed to commit changes"
+            exit 1
+          }
           
-          - Unique courses: ${{ steps.scrape.outputs.unique_courses }}
-          - Total sections: ${{ steps.scrape.outputs.total_sections }}
-          - Processing time: ${{ steps.scrape.outputs.duration }}s
-          - Success rate: ${{ steps.scrape.outputs.success_rate }}%
-        title: "📊 Course Data Update - ${{ steps.scrape.outputs.date }}"
-        body: |
-          ## 🎓 Penn State Course Data Update
+          # Push to main branch
+          git push origin main || {
+            echo "Failed to push changes"
+            exit 1
+          }
           
-          This automated pull request contains fresh course data scraped from Penn State LionPath.
-          
-          ### 📈 Performance Metrics
-          
-          | Metric | Value |
-          |--------|-------|
-          | **Unique Courses** | ${{ steps.scrape.outputs.unique_courses }} |
-          | **Total Sections** | ${{ steps.scrape.outputs.total_sections }} |
-          | **Processing Time** | ${{ steps.scrape.outputs.duration }}s |
-          | **Processing Rate** | ${{ steps.scrape.outputs.courses_rate }} courses/sec |
-          | **Success Rate** | ${{ steps.scrape.outputs.success_rate }}% |
-          | **File Size** | ${{ steps.scrape.outputs.file_size }} bytes |
-          
-          ### 📁 Files Updated
-          
-          - `data/${{ steps.scrape.outputs.filename }}` - Course data in optimized JSONL format
-          - `scrape_summary.md` - Detailed summary report
-          
-          ### 🔧 Data Structure
-          
-          Uses optimized structure with:
-          - 50-70% smaller file sizes
-          - Logical separation of course/section data
-          - Built-in statistics and aggregation
-          
-          ### 🤖 Automation Details
-          
-          - **Trigger**: ${{ github.event_name == 'schedule' && 'Weekly automated run' || 'Manual execution' }}
-          - **Test Mode**: ${{ inputs.test_mode == 'true' && 'Yes' || 'No' }}
-          - **Rate Limiting**: 15 requests/second
-          - **Error Handling**: Comprehensive retry logic
-          
-          ---
-          
-          **Note**: This is an automated pull request. Please review the changes before merging.
-        branch: course-update-${{ steps.scrape.outputs.date }}
-        delete-branch: true
-        labels: |
-          automated
-          data-update
-          course-scraping
+          echo "changes_made=true" >> $GITHUB_OUTPUT
+          echo "✅ Data successfully committed and pushed to main branch"
+        fi
     
     - name: Upload logs artifact
       if: always()
@@ -554,22 +514,22 @@ jobs:
         } >> $GITHUB_STEP_SUMMARY
     
     - name: Success notification
-      if: success() && steps.create_pr.outputs.pull-request-number
+      if: success() && steps.commit_push.outputs.changes_made == 'true'
       run: |
         echo "✅ Workflow completed successfully!"
-        echo "📋 Pull Request: #${{ steps.create_pr.outputs.pull-request-number }}"
+        echo "📊 Data committed directly to main branch"
         
         # Create success summary for GitHub Actions
         {
           echo "## ✅ Course Scraping Successful"
           echo ""
-          echo "Successfully scraped Penn State course data."
+          echo "Successfully scraped Penn State course data and pushed to main branch."
           echo ""
           echo "### 📊 Results"
           echo "• **Courses**: ${{ steps.scrape.outputs.unique_courses }}"
           echo "• **Sections**: ${{ steps.scrape.outputs.total_sections }}"
           echo "• **Success Rate**: ${{ steps.scrape.outputs.success_rate }}%"
-          echo "• **Pull Request**: #${{ steps.create_pr.outputs.pull-request-number }}"
+          echo "• **Status**: Data committed to main branch"
           echo ""
           echo "### 📁 Output"
           echo "• **File**: \`data/${{ steps.scrape.outputs.filename }}\`"
