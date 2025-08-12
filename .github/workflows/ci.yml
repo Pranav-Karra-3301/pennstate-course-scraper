@@ -1,0 +1,400 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install linting dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort mypy types-requests
+    
+    - name: Run Black formatter check
+      run: |
+        black --check --diff *.py
+      continue-on-error: true
+    
+    - name: Run isort import checker
+      run: |
+        isort --check-only --diff *.py
+      continue-on-error: true
+    
+    - name: Run Flake8 linter
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Run mypy type checker
+      run: |
+        mypy --ignore-missing-imports --no-strict-optional *.py
+      continue-on-error: true
+
+  test:
+    name: Run Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+        exclude:
+          # Exclude some combinations to save CI time
+          - os: windows-latest
+            python-version: '3.9'
+          - os: macos-latest
+            python-version: '3.9'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-timeout pytest-mock
+    
+    - name: Run unit tests with coverage
+      run: |
+        pytest test_suite.py -v --cov=. --cov-report=xml --cov-report=term --timeout=60
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+    
+    - name: Run specific scraper tests
+      run: |
+        python test_suite.py
+    
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Test scraper initialization
+      run: |
+        python -c "from scraper_optimized import OptimizedLionPathScraper; scraper = OptimizedLionPathScraper(); print('✅ Scraper initialized successfully')"
+    
+    - name: Test data structures
+      run: |
+        python -c "
+from scraper_optimized import CourseInfo, SectionInfo, OptimizedCourseData
+course = CourseInfo(course_code='TEST 101')
+section = SectionInfo(section='001')
+data = OptimizedCourseData(course_info=course, sections=[section])
+print(f'✅ Data structures working: {data.get_section_count()} section(s)')
+        "
+    
+    - name: Test file I/O operations
+      run: |
+        python -c "
+import tempfile
+import os
+from scraper_optimized import CourseInfo, SectionInfo, OptimizedCourseData, save_optimized_results
+
+# Create test data
+course = CourseInfo(course_code='TEST 101', course_title='Test Course')
+section = SectionInfo(section='001', class_capacity=30)
+data = {'TEST 101': OptimizedCourseData(course_info=course, sections=[section])}
+
+# Test saving
+with tempfile.NamedTemporaryFile(suffix='.jsonl', delete=False) as f:
+    save_optimized_results(data, f.name, 'jsonl')
+    assert os.path.exists(f.name), 'File not created'
+    size = os.path.getsize(f.name)
+    print(f'✅ File I/O working: {size} bytes written')
+    os.unlink(f.name)
+        "
+    
+    - name: Test scraper with limited scope
+      run: |
+        # Test with very limited scope (1 subject, test mode)
+        timeout 30 python scraper_optimized.py \
+          --output test_output.jsonl \
+          --max-subjects 1 \
+          --max-workers 2 \
+          --max-detail-workers 2 \
+          --rate-limit 5 \
+          --retry-attempts 1 || echo "Scraper test completed (may fail if site is down)"
+      continue-on-error: true
+
+  security-check:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit
+    
+    - name: Run Safety security check
+      run: |
+        pip install -r requirements.txt
+        safety check --json || true
+      continue-on-error: true
+    
+    - name: Run Bandit security linter
+      run: |
+        bandit -r . -f json -o bandit-report.json || true
+        bandit -r . -f txt
+      continue-on-error: true
+
+  validate-workflows:
+    name: Validate GitHub Workflows
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Validate workflow files
+      run: |
+        # Check YAML syntax for all workflow files
+        for file in .github/workflows/*.yml; do
+          echo "Checking $file..."
+          python -c "import yaml; yaml.safe_load(open('$file'))" && echo "✅ $file is valid" || echo "❌ $file has errors"
+        done
+
+  dependency-check:
+    name: Dependency Management
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Check for outdated dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip list --outdated || true
+    
+    - name: Verify requirements.txt
+      run: |
+        pip install -r requirements.txt
+        pip check
+        echo "✅ All dependencies resolved successfully"
+    
+    - name: Generate dependency tree
+      run: |
+        pip install pipdeptree
+        pipdeptree
+      continue-on-error: true
+
+  build-artifacts:
+    name: Build and Store Artifacts
+    runs-on: ubuntu-latest
+    needs: [test, integration-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install wheel setuptools
+    
+    - name: Create distribution package
+      run: |
+        # Create a simple setup.py for packaging
+        cat > setup.py << 'EOF'
+        from setuptools import setup, find_packages
+        
+        with open("README.md", "r", encoding="utf-8") as fh:
+            long_description = fh.read()
+        
+        with open("requirements.txt", "r", encoding="utf-8") as fh:
+            requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+        
+        setup(
+            name="pennstate-course-scraper",
+            version="1.0.0",
+            author="Penn State Course Scraper Contributors",
+            description="A course scraper for Penn State LionPath",
+            long_description=long_description,
+            long_description_content_type="text/markdown",
+            url="https://github.com/${{ github.repository }}",
+            py_modules=["scraper_optimized", "scraper"],
+            python_requires=">=3.9",
+            install_requires=requirements,
+            classifiers=[
+                "Programming Language :: Python :: 3",
+                "Programming Language :: Python :: 3.9",
+                "Programming Language :: Python :: 3.10",
+                "Programming Language :: Python :: 3.11",
+                "Programming Language :: Python :: 3.12",
+                "License :: OSI Approved :: MIT License",
+                "Operating System :: OS Independent",
+            ],
+        )
+        EOF
+        
+        python setup.py sdist bdist_wheel
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-package-distributions
+        path: dist/
+        retention-days: 30
+    
+    - name: Package scraper files
+      run: |
+        mkdir -p package
+        cp *.py requirements.txt README.md LICENSE package/ 2>/dev/null || true
+        tar -czf scraper-package.tar.gz package/
+    
+    - name: Upload scraper package
+      uses: actions/upload-artifact@v4
+      with:
+        name: scraper-package
+        path: scraper-package.tar.gz
+        retention-days: 30
+
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Create Dockerfile
+      run: |
+        cat > Dockerfile << 'EOF'
+        FROM python:3.11-slim
+        
+        WORKDIR /app
+        
+        # Install system dependencies
+        RUN apt-get update && apt-get install -y \
+            gcc \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Copy requirements and install Python dependencies
+        COPY requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+        
+        # Copy application files
+        COPY *.py ./
+        
+        # Create data directory
+        RUN mkdir -p /app/data
+        
+        # Set environment variables
+        ENV PYTHONUNBUFFERED=1
+        ENV PYTHONDONTWRITEBYTECODE=1
+        
+        # Default command
+        CMD ["python", "scraper_optimized.py", "--help"]
+        EOF
+    
+    - name: Build Docker image
+      run: |
+        docker build -t pennstate-scraper:test .
+        echo "✅ Docker image built successfully"
+    
+    - name: Test Docker image
+      run: |
+        docker run --rm pennstate-scraper:test python -c "from scraper_optimized import OptimizedLionPathScraper; print('✅ Scraper imports work in Docker')"
+
+  notify-success:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [lint, test, integration-test, security-check, validate-workflows]
+    if: success()
+    
+    steps:
+    - name: Success Summary
+      run: |
+        echo "## ✅ CI Pipeline Successful!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All checks have passed:" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Code quality checks" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Unit tests" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Integration tests" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Security scanning" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Workflow validation" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

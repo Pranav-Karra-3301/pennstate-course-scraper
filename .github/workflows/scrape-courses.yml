@@ -20,6 +20,7 @@ on:
 jobs:
   scrape-courses:
     runs-on: ubuntu-latest
+    timeout-minutes: 120  # Global timeout for the entire job
     permissions:
       contents: write
       pull-requests: write
@@ -31,140 +32,285 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         cache: 'pip'
     
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
-        pip install -r requirements.txt
-        pip install bc  # For calculations
+        set -euo pipefail
+        echo "📦 Installing system dependencies..."
+        sudo apt-get update || echo "Warning: apt-get update failed, continuing..."
+        sudo apt-get install -y bc jq || echo "Warning: Some packages failed to install"
+        
+        # Verify installations
+        command -v bc >/dev/null 2>&1 || { echo "❌ bc is not installed"; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "❌ jq is not installed"; exit 1; }
+        echo "✅ System dependencies installed successfully"
     
-    - name: Create data directory
+    - name: Install Python dependencies
       run: |
-        mkdir -p data
+        set -euo pipefail
+        echo "🐍 Installing Python dependencies..."
+        
+        # Upgrade pip first
+        python -m pip install --upgrade pip
+        
+        # Install requirements with retry logic
+        max_attempts=3
+        attempt=1
+        while [ $attempt -le $max_attempts ]; do
+          echo "Attempt $attempt of $max_attempts..."
+          if pip install -r requirements.txt --no-cache-dir; then
+            echo "✅ Python dependencies installed successfully"
+            break
+          else
+            echo "⚠️ Installation attempt $attempt failed"
+            if [ $attempt -eq $max_attempts ]; then
+              echo "❌ Failed to install Python dependencies after $max_attempts attempts"
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep 5
+          fi
+        done
+        
+        # Verify key imports
+        python -c "import requests, bs4, pandas, aiohttp" || { echo "❌ Failed to import required modules"; exit 1; }
+    
+    - name: Pre-flight checks
+      id: preflight
+      run: |
+        set -euo pipefail
+        echo "🔍 Running pre-flight checks..."
+        
+        # Check if scraper exists
+        if [ ! -f "scraper_optimized.py" ]; then
+          echo "❌ scraper_optimized.py not found!"
+          exit 1
+        fi
+        
+        # Check Python syntax
+        python -m py_compile scraper_optimized.py || { echo "❌ Python syntax error in scraper"; exit 1; }
+        
+        # Create necessary directories
+        mkdir -p data logs artifacts
+        
+        # Test scraper import
+        python -c "from scraper_optimized import OptimizedLionPathScraper" || { echo "❌ Failed to import scraper"; exit 1; }
+        
+        echo "✅ Pre-flight checks passed"
+        echo "status=success" >> $GITHUB_OUTPUT
     
     - name: Run course scraper
       id: scrape
+      timeout-minutes: 90  # Timeout for scraper execution
       run: |
-        echo "Starting course scrape at $(date)"
+        set -euo pipefail
+        echo "🚀 Starting course scrape at $(date)"
         
-        # Set up variables
+        # Initialize variables with defaults
         start_time=$(date +%s)
         datestamp=$(date +%Y%m%d)
         output_file="data/psu_courses_${datestamp}.jsonl"
         
+        # Initialize statistics with defaults
+        unique_courses=0
+        total_sections=0
+        subjects_processed=0
+        total_subjects=0
+        failed_subjects=0
+        sections_rate=0
+        courses_rate=0
+        success_rate=0
+        file_size=0
+        line_count=0
+        
         # Determine scraping parameters
         if [ "${{ inputs.test_mode }}" = "true" ]; then
-          echo "Running in test mode with ${{ inputs.max_subjects }} subjects"
+          echo "🧪 Running in test mode with ${{ inputs.max_subjects }} subjects"
           max_subjects_arg="--max-subjects ${{ inputs.max_subjects }}"
           workers=5
           detail_workers=10
+          min_courses=5  # Minimum expected courses in test mode
+          min_sections=10  # Minimum expected sections in test mode
         else
-          echo "Running full scrape"
+          echo "🏃 Running full scrape"
           max_subjects_arg=""
           workers=12
           detail_workers=40
+          min_courses=100  # Minimum expected courses in production
+          min_sections=500  # Minimum expected sections in production
         fi
         
-        # Run the scraper
-        echo "Executing scraper..."
-        python scraper_optimized.py \
-          --output "${output_file}" \
-          --format jsonl \
-          --campus UP \
-          --max-workers ${workers} \
-          --max-detail-workers ${detail_workers} \
-          --rate-limit 15 \
-          --retry-attempts 3 \
-          ${max_subjects_arg} 2>&1 | tee scrape_output.log
+        # Run the scraper with retry logic
+        max_attempts=2
+        attempt=1
+        scrape_success=false
+        
+        while [ $attempt -le $max_attempts ] && [ "$scrape_success" = "false" ]; do
+          echo "📊 Scraping attempt $attempt of $max_attempts..."
+          
+          if timeout 5400 python scraper_optimized.py \
+            --output "${output_file}" \
+            --format jsonl \
+            --campus UP \
+            --max-workers ${workers} \
+            --max-detail-workers ${detail_workers} \
+            --rate-limit 15 \
+            --retry-attempts 3 \
+            ${max_subjects_arg} 2>&1 | tee "logs/scrape_output_attempt_${attempt}.log"; then
+            
+            scrape_success=true
+            echo "✅ Scraper execution completed"
+            cp "logs/scrape_output_attempt_${attempt}.log" scrape_output.log
+          else
+            echo "⚠️ Scraper attempt $attempt failed with exit code $?"
+            attempt=$((attempt + 1))
+            if [ $attempt -le $max_attempts ]; then
+              echo "🔄 Retrying in 30 seconds..."
+              sleep 30
+            fi
+          fi
+        done
+        
+        if [ "$scrape_success" = "false" ]; then
+          echo "❌ Scraper failed after $max_attempts attempts"
+          exit 1
+        fi
         
         # Calculate duration
         end_time=$(date +%s)
         duration=$((end_time - start_time))
         
-        # Extract statistics from log - updated patterns for optimized scraper
-        unique_courses=$(grep -o "Unique courses: [0-9]*" scrape_output.log | grep -o "[0-9]*" | tail -1 || echo "0")
-        total_sections=$(grep -o "Total sections: [0-9]*" scrape_output.log | grep -o "[0-9]*" | tail -1 || echo "0")
-        subjects_processed=$(grep -o "Subjects processed: [0-9]*/[0-9]*" scrape_output.log | tail -1 | cut -d'/' -f1 || echo "0")
-        total_subjects=$(grep -o "Subjects processed: [0-9]*/[0-9]*" scrape_output.log | tail -1 | cut -d'/' -f2 || echo "0")
-        failed_subjects=$(grep -o "Failed subjects: [0-9]*" scrape_output.log | grep -o "[0-9]*" | tail -1 || echo "0")
+        # Extract statistics from log with robust error handling
+        echo "📊 Extracting statistics from log..."
         
-        # Calculate rates (avoid division by zero)
-        if [ "$duration" -gt 0 ] && [ "$total_sections" -gt 0 ]; then
-          sections_rate=$(echo "scale=2; $total_sections / $duration" | bc -l)
-        else
-          sections_rate="0"
+        # Helper function to safely extract numbers
+        extract_number() {
+          local pattern="$1"
+          local default="$2"
+          local value=$(grep -o "$pattern" scrape_output.log 2>/dev/null | grep -o "[0-9]*" | tail -1 || echo "$default")
+          echo "${value:-$default}"
+        }
+        
+        # Extract statistics with fallbacks
+        unique_courses=$(extract_number "Unique courses: [0-9]*" "0")
+        total_sections=$(extract_number "Total sections: [0-9]*" "0")
+        
+        # Extract subjects processed (format: "Subjects processed: X/Y")
+        subjects_line=$(grep "Subjects processed:" scrape_output.log 2>/dev/null | tail -1 || echo "")
+        if [ -n "$subjects_line" ]; then
+          subjects_processed=$(echo "$subjects_line" | sed -n 's/.*Subjects processed: \([0-9]*\).*/\1/p' || echo "0")
+          total_subjects=$(echo "$subjects_line" | sed -n 's/.*Subjects processed: [0-9]*\/\([0-9]*\).*/\1/p' || echo "0")
         fi
         
-        if [ "$duration" -gt 0 ] && [ "$unique_courses" -gt 0 ]; then
-          courses_rate=$(echo "scale=2; $unique_courses / $duration" | bc -l)
-        else
-          courses_rate="0"
+        failed_subjects=$(extract_number "Failed subjects: [0-9]*" "0")
+        
+        # Calculate rates with division by zero protection
+        if [ "$duration" -gt 0 ]; then
+          if [ "$total_sections" -gt 0 ]; then
+            sections_rate=$(echo "scale=2; $total_sections / $duration" | bc -l 2>/dev/null || echo "0")
+          fi
+          if [ "$unique_courses" -gt 0 ]; then
+            courses_rate=$(echo "scale=2; $unique_courses / $duration" | bc -l 2>/dev/null || echo "0")
+          fi
         fi
         
-        # Calculate success rate
-        if [ "$total_subjects" -gt 0 ]; then
-          success_rate=$(echo "scale=1; ($subjects_processed - $failed_subjects) * 100 / $total_subjects" | bc -l)
-        else
-          success_rate="0"
+        # Calculate success rate with protection
+        if [ "$total_subjects" -gt 0 ] && [ "$subjects_processed" -gt 0 ]; then
+          successful_subjects=$((subjects_processed - failed_subjects))
+          if [ "$successful_subjects" -lt 0 ]; then
+            successful_subjects=0
+          fi
+          success_rate=$(echo "scale=1; $successful_subjects * 100 / $total_subjects" | bc -l 2>/dev/null || echo "0")
         fi
         
-        # Store outputs for later steps
-        echo "duration=$duration" >> $GITHUB_OUTPUT
-        echo "unique_courses=$unique_courses" >> $GITHUB_OUTPUT
-        echo "total_sections=$total_sections" >> $GITHUB_OUTPUT
-        echo "subjects_processed=$subjects_processed" >> $GITHUB_OUTPUT
-        echo "total_subjects=$total_subjects" >> $GITHUB_OUTPUT
-        echo "failed_subjects=$failed_subjects" >> $GITHUB_OUTPUT
-        echo "sections_rate=$sections_rate" >> $GITHUB_OUTPUT
-        echo "courses_rate=$courses_rate" >> $GITHUB_OUTPUT
-        echo "success_rate=$success_rate" >> $GITHUB_OUTPUT
-        echo "filename=psu_courses_${datestamp}.jsonl" >> $GITHUB_OUTPUT
-        echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
-        echo "datetime=$(date)" >> $GITHUB_OUTPUT
-        
-        # Verify output file exists and get size
+        # Verify output file exists and get metrics
         if [ -f "${output_file}" ]; then
-          file_size=$(wc -c < "${output_file}")
-          line_count=$(wc -l < "${output_file}")
-          echo "file_size=$file_size" >> $GITHUB_OUTPUT
-          echo "line_count=$line_count" >> $GITHUB_OUTPUT
-          echo "✅ Output file created: ${output_file} (${line_count} lines, ${file_size} bytes)"
+          file_size=$(stat -c%s "${output_file}" 2>/dev/null || wc -c < "${output_file}" 2>/dev/null || echo "0")
+          line_count=$(wc -l < "${output_file}" 2>/dev/null || echo "0")
+          
+          echo "✅ Output file created: ${output_file}"
+          echo "📊 File size: ${file_size} bytes, Lines: ${line_count}"
+          
+          # Validate minimum data thresholds
+          if [ "$line_count" -lt "$min_courses" ]; then
+            echo "⚠️ Warning: Only ${line_count} courses found, expected at least ${min_courses}"
+            if [ "${{ inputs.test_mode }}" != "true" ]; then
+              echo "❌ Production run produced insufficient data"
+              exit 1
+            fi
+          fi
         else
           echo "❌ Output file not found: ${output_file}"
-          echo "file_size=0" >> $GITHUB_OUTPUT
-          echo "line_count=0" >> $GITHUB_OUTPUT
           exit 1
         fi
         
+        # Store outputs for later steps (with defaults to prevent failures)
+        {
+          echo "duration=${duration:-0}"
+          echo "unique_courses=${unique_courses:-0}"
+          echo "total_sections=${total_sections:-0}"
+          echo "subjects_processed=${subjects_processed:-0}"
+          echo "total_subjects=${total_subjects:-0}"
+          echo "failed_subjects=${failed_subjects:-0}"
+          echo "sections_rate=${sections_rate:-0}"
+          echo "courses_rate=${courses_rate:-0}"
+          echo "success_rate=${success_rate:-0}"
+          echo "filename=psu_courses_${datestamp}.jsonl"
+          echo "date=$(date +%Y-%m-%d)"
+          echo "datetime=$(date)"
+          echo "file_size=${file_size:-0}"
+          echo "line_count=${line_count:-0}"
+          echo "scrape_success=true"
+        } >> $GITHUB_OUTPUT
+        
         # Summary
         echo "============================================"
-        echo "Scraping completed in $duration seconds"
-        echo "Unique courses: $unique_courses"
-        echo "Total sections: $total_sections"  
-        echo "Subjects: $subjects_processed/$total_subjects (${success_rate}% success)"
-        echo "Rate: $sections_rate sections/sec, $courses_rate courses/sec"
+        echo "📊 SCRAPING SUMMARY"
+        echo "============================================"
+        echo "⏱️  Duration: $duration seconds"
+        echo "🎓 Unique courses: $unique_courses"
+        echo "📚 Total sections: $total_sections"  
+        echo "📖 Subjects: $subjects_processed/$total_subjects"
+        echo "✅ Success rate: ${success_rate}%"
+        echo "⚡ Processing rate: $sections_rate sections/sec"
+        echo "💾 Output: ${line_count} lines, ${file_size} bytes"
         echo "============================================"
     
-    - name: Validate output
+    - name: Validate output data
+      id: validate
+      if: steps.scrape.outputs.scrape_success == 'true'
       run: |
+        set -euo pipefail
         output_file="data/${{ steps.scrape.outputs.filename }}"
+        
+        echo "🔍 Validating output file: $output_file"
         
         if [ ! -f "$output_file" ]; then
           echo "❌ Output file missing: $output_file"
           exit 1
         fi
         
-        # Check if file is valid JSON lines
-        echo "🔍 Validating JSONL format..."
-        python -c "
+        # Check file is not empty
+        if [ ! -s "$output_file" ]; then
+          echo "❌ Output file is empty"
+          exit 1
+        fi
+        
+        # Validate JSON structure with detailed error reporting
+        echo "📋 Validating JSONL format..."
+        
+        # Use Python to validate the JSONL file
+        python3 -c "
 import json
 import sys
 
+filepath = '$output_file'
 try:
-    with open('$output_file', 'r') as f:
+    with open(filepath, 'r') as f:
         lines = f.readlines()
     
     if not lines:
@@ -172,91 +318,127 @@ try:
         sys.exit(1)
     
     valid_lines = 0
-    for i, line in enumerate(lines):
+    invalid_lines = []
+    
+    for i, line in enumerate(lines, 1):
         try:
             data = json.loads(line.strip())
             if 'course' in data and 'sections' in data:
                 valid_lines += 1
             else:
-                print(f'⚠️ Line {i+1}: Missing required fields')
-        except json.JSONDecodeError as e:
-            print(f'❌ Line {i+1}: Invalid JSON - {e}')
+                invalid_lines.append(i)
+        except json.JSONDecodeError:
+            invalid_lines.append(i)
+    
+    print(f'📊 Validation Results:')
+    print(f'  Total lines: {len(lines)}')
+    print(f'  Valid records: {valid_lines}')
+    print(f'  Invalid records: {len(invalid_lines)}')
+    
+    if invalid_lines:
+        print(f'❌ Invalid lines: {invalid_lines[:5]}')
+        sys.exit(1)
+    
+    if valid_lines == len(lines):
+        print(f'✅ All {valid_lines} records are valid!')
+        first = json.loads(lines[0])
+        c = first.get('course', {})
+        print(f\"📚 Sample: {c.get('course_code', 'N/A')} - {c.get('course_title', 'N/A')}\")
+    else:
+        rate = (valid_lines / len(lines)) * 100
+        if rate < 95:
+            print(f'⚠️ Only {rate:.1f}% records valid')
             sys.exit(1)
-    
-    print(f'✅ Validation passed: {valid_lines}/{len(lines)} valid course records')
-    
-    # Sample first record
-    first_record = json.loads(lines[0])
-    course_info = first_record.get('course', {})
-    sections_info = first_record.get('sections', [])
-    
-    print(f'📚 Sample course: {course_info.get(\"course_code\", \"N/A\")} - {course_info.get(\"course_title\", \"N/A\")}')
-    print(f'📝 Sections: {len(sections_info)}')
-    
 except Exception as e:
     print(f'💥 Validation error: {e}')
     sys.exit(1)
         "
         
-        echo "✅ Output validation passed"
+        echo "validation_complete=true" >> $GITHUB_OUTPUT
+        echo "✅ Output validation completed successfully"
     
     - name: Create summary report
+      if: steps.validate.outputs.validation_complete == 'true'
       run: |
+        set -euo pipefail
+        
+        # Create comprehensive summary report
         cat > scrape_summary.md << 'EOF'
-        # Course Scraping Summary - ${{ steps.scrape.outputs.date }}
-        
-        ## 📊 Statistics
-        
-        - **Date**: ${{ steps.scrape.outputs.datetime }}
-        - **Duration**: ${{ steps.scrape.outputs.duration }} seconds (${{ steps.scrape.outputs.duration }} / 60 = $((${{ steps.scrape.outputs.duration }} / 60)) minutes)
-        - **Unique Courses**: ${{ steps.scrape.outputs.unique_courses }}
-        - **Total Sections**: ${{ steps.scrape.outputs.total_sections }}
-        - **Subjects Processed**: ${{ steps.scrape.outputs.subjects_processed }}/${{ steps.scrape.outputs.total_subjects }}
-        - **Failed Subjects**: ${{ steps.scrape.outputs.failed_subjects }}
-        - **Success Rate**: ${{ steps.scrape.outputs.success_rate }}%
-        - **Processing Rate**: ${{ steps.scrape.outputs.sections_rate }} sections/second, ${{ steps.scrape.outputs.courses_rate }} courses/second
-        
-        ## 📁 Output File
-        
-        - **Filename**: `data/${{ steps.scrape.outputs.filename }}`
-        - **Format**: JSONL (optimized structure)
-        - **Size**: ${{ steps.scrape.outputs.file_size }} bytes
-        - **Records**: ${{ steps.scrape.outputs.line_count }} course records
-        - **Campus**: University Park (UP)
-        - **Semester**: Fall 2025
-        
-        ## 🔍 Data Quality
-        
-        - **Structure**: Optimized format separating course-level from section-level data
-        - **Completeness**: Each record includes comprehensive course and section details
-        - **Validation**: All records validated as proper JSON with required fields
-        
-        ## 📝 Notes
-        
-        This automated scraping run was executed on GitHub Actions using:
-        - Respectful rate limiting (15 requests/second)
-        - Comprehensive error handling and retries
-        - Optimized data structure to reduce redundancy
-        - Focus on University Park campus courses
-        
-        ## 🤖 Automation Details
-        
-        - **Triggered**: ${{ github.event_name == 'schedule' && 'Weekly schedule (Sundays 6 AM UTC)' || 'Manual trigger' }}
-        - **Environment**: Ubuntu Latest (GitHub Actions)
-        - **Python Version**: 3.11
-        - **Scraper Version**: Optimized with enhanced data structure
-        
-        ---
-        
-        Generated automatically by [Penn State Course Scraper](https://github.com/${{ github.repository }})
+# Course Scraping Summary - ${{ steps.scrape.outputs.date }}
+
+## 📊 Statistics
+
+- **Date**: ${{ steps.scrape.outputs.datetime }}
+- **Duration**: ${{ steps.scrape.outputs.duration }} seconds
+- **Unique Courses**: ${{ steps.scrape.outputs.unique_courses }}
+- **Total Sections**: ${{ steps.scrape.outputs.total_sections }}
+- **Subjects Processed**: ${{ steps.scrape.outputs.subjects_processed }}/${{ steps.scrape.outputs.total_subjects }}
+- **Failed Subjects**: ${{ steps.scrape.outputs.failed_subjects }}
+- **Success Rate**: ${{ steps.scrape.outputs.success_rate }}%
+- **Processing Rate**: ${{ steps.scrape.outputs.sections_rate }} sections/second
+
+## 📁 Output File
+
+- **Filename**: `data/${{ steps.scrape.outputs.filename }}`
+- **Format**: JSONL (optimized structure)
+- **Size**: ${{ steps.scrape.outputs.file_size }} bytes
+- **Records**: ${{ steps.scrape.outputs.line_count }} course records
+- **Campus**: University Park (UP)
+- **Semester**: Fall 2025
+
+## 🔍 Data Quality
+
+- **Structure**: Optimized format separating course-level from section-level data
+- **Validation**: All records validated as proper JSON with required fields
+- **Completeness**: Comprehensive course and section details included
+
+## 📝 Run Details
+
+- **Trigger**: ${{ github.event_name == 'schedule' && 'Weekly schedule (Sundays 6 AM UTC)' || 'Manual trigger' }}
+- **Test Mode**: ${{ inputs.test_mode == 'true' && 'Yes' || 'No' }}
+- **Environment**: Ubuntu Latest (GitHub Actions)
+- **Python Version**: 3.11
+
+## 🤖 Automation
+
+This automated scraping run was executed with:
+- Respectful rate limiting (15 requests/second)
+- Comprehensive error handling and retries
+- Optimized data structure to reduce redundancy
+- Focus on University Park campus courses
+
+---
+
+Generated automatically by [Penn State Course Scraper](https://github.com/${{ github.repository }})
         EOF
+        
+        echo "✅ Summary report created"
     
     - name: Configure Git
+      if: steps.validate.outputs.validation_complete == 'true'
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action Bot"
+        set -euo pipefail
+        
+        # Configure git with error handling
+        git config --local user.email "action@github.com" || {
+          echo "⚠️ Failed to set git email, trying global config"
+          git config --global user.email "action@github.com"
+        }
+        
+        git config --local user.name "GitHub Action Bot" || {
+          echo "⚠️ Failed to set git name, trying global config"
+          git config --global user.name "GitHub Action Bot"
+        }
+        
+        # Verify configuration
+        git config --get user.email || { echo "❌ Git email not configured"; exit 1; }
+        git config --get user.name || { echo "❌ Git name not configured"; exit 1; }
+        
+        echo "✅ Git configured successfully"
     
     - name: Create Pull Request
+      if: steps.validate.outputs.validation_complete == 'true'
+      id: create_pr
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -279,41 +461,33 @@ except Exception as e:
           |--------|-------|
           | **Unique Courses** | ${{ steps.scrape.outputs.unique_courses }} |
           | **Total Sections** | ${{ steps.scrape.outputs.total_sections }} |
-          | **Processing Time** | ${{ steps.scrape.outputs.duration }}s ($((${{ steps.scrape.outputs.duration }} / 60)) minutes) |
-          | **Processing Rate** | ${{ steps.scrape.outputs.courses_rate }} courses/sec, ${{ steps.scrape.outputs.sections_rate }} sections/sec |
-          | **Success Rate** | ${{ steps.scrape.outputs.success_rate }}% (${{ steps.scrape.outputs.subjects_processed }}/${{ steps.scrape.outputs.total_subjects }} subjects) |
+          | **Processing Time** | ${{ steps.scrape.outputs.duration }}s |
+          | **Processing Rate** | ${{ steps.scrape.outputs.courses_rate }} courses/sec |
+          | **Success Rate** | ${{ steps.scrape.outputs.success_rate }}% |
           | **File Size** | ${{ steps.scrape.outputs.file_size }} bytes |
           
-          ### 📁 Files Added/Updated
+          ### 📁 Files Updated
           
           - `data/${{ steps.scrape.outputs.filename }}` - Course data in optimized JSONL format
           - `scrape_summary.md` - Detailed summary report
           
           ### 🔧 Data Structure
           
-          This update uses the **optimized data structure** that separates course-level information from section-specific details:
+          Uses optimized structure with:
+          - 50-70% smaller file sizes
+          - Logical separation of course/section data
+          - Built-in statistics and aggregation
           
-          - **50-70% smaller file sizes** through reduced redundancy
-          - **Logical separation** of course vs. section data  
-          - **Built-in statistics** for enrollment and capacity aggregation
-          - **Comprehensive information** including all course details, schedules, enrollment data, and requirements
-          
-          ### 🎯 Campus Focus
-          
-          - **Target**: University Park (UP) campus
-          - **Filtering**: Smart detection to exclude branch campuses and World Campus
-          - **Quality**: Comprehensive course information with detailed section data
-          
-          ### 🤖 Automation
+          ### 🤖 Automation Details
           
           - **Trigger**: ${{ github.event_name == 'schedule' && 'Weekly automated run' || 'Manual execution' }}
-          - **Rate Limiting**: 15 requests/second for respectful scraping
-          - **Error Handling**: Comprehensive retry logic and failure tracking
-          - **Validation**: Automated JSON validation and data quality checks
+          - **Test Mode**: ${{ inputs.test_mode == 'true' && 'Yes' || 'No' }}
+          - **Rate Limiting**: 15 requests/second
+          - **Error Handling**: Comprehensive retry logic
           
           ---
           
-          **Note**: This is an automated pull request. The data was collected using respectful scraping practices and includes comprehensive course information for academic and research purposes.
+          **Note**: This is an automated pull request. Please review the changes before merging.
         branch: course-update-${{ steps.scrape.outputs.date }}
         delete-branch: true
         labels: |
@@ -321,20 +495,74 @@ except Exception as e:
           data-update
           course-scraping
     
-    - name: Upload scraping logs and artifacts
+    - name: Upload logs artifact
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: scraping-logs-${{ steps.scrape.outputs.date }}
+        name: scraping-logs-${{ steps.scrape.outputs.date || github.run_id }}
         path: |
           scrape_output.log
+          logs/*.log
           psu_scraper_optimized.log
         retention-days: 30
+        if-no-files-found: warn
     
-    - name: Upload course data artifact
-      if: success()
-      uses: actions/upload-artifact@v3
+    - name: Upload data artifact
+      if: steps.validate.outputs.validation_complete == 'true'
+      uses: actions/upload-artifact@v4
       with:
         name: course-data-${{ steps.scrape.outputs.date }}
-        path: data/${{ steps.scrape.outputs.filename }}
+        path: |
+          data/${{ steps.scrape.outputs.filename }}
+          scrape_summary.md
         retention-days: 90
+        if-no-files-found: error
+    
+    - name: Report failure
+      if: failure()
+      run: |
+        echo "❌ Workflow failed!"
+        echo "Debug information:"
+        echo "- Event: ${{ github.event_name }}"
+        echo "- Test mode: ${{ inputs.test_mode }}"
+        echo "- Run ID: ${{ github.run_id }}"
+        echo "- Run number: ${{ github.run_number }}"
+        
+        # Create failure summary for GitHub Actions
+        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+## ❌ Course Scraping Failed
+
+The course scraping workflow encountered an error.
+
+### Debug Information
+- **Run ID**: ${{ github.run_id }}
+- **Run Number**: ${{ github.run_number }}
+- **Trigger**: ${{ github.event_name }}
+- **Test Mode**: ${{ inputs.test_mode }}
+
+Please check the logs for more details.
+        EOF
+    
+    - name: Success notification
+      if: success() && steps.create_pr.outputs.pull-request-number
+      run: |
+        echo "✅ Workflow completed successfully!"
+        echo "📋 Pull Request: #${{ steps.create_pr.outputs.pull-request-number }}"
+        
+        # Create success summary for GitHub Actions
+        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+## ✅ Course Scraping Successful
+
+Successfully scraped Penn State course data.
+
+### 📊 Results
+- **Courses**: ${{ steps.scrape.outputs.unique_courses }}
+- **Sections**: ${{ steps.scrape.outputs.total_sections }}
+- **Success Rate**: ${{ steps.scrape.outputs.success_rate }}%
+- **Pull Request**: #${{ steps.create_pr.outputs.pull-request-number }}
+
+### 📁 Output
+- **File**: `data/${{ steps.scrape.outputs.filename }}`
+- **Size**: ${{ steps.scrape.outputs.file_size }} bytes
+- **Records**: ${{ steps.scrape.outputs.line_count }}
+        EOF

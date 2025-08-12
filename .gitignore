@@ -1,8 +1,12 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -16,46 +20,139 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
 # Virtual environments
-venv/
+.env
+.venv
 env/
+venv/
 ENV/
 env.bak/
 venv.bak/
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.spyderproject
+.spyproject
+.ropeproject
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# OS Files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+ehthumbs.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
 
 # Logs
 *.log
+logs/
+!psu_scraper_optimized.log
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Data files (but allow example)
-*.jsonl
-*.json
-*.csv
-!example_output.jsonl
+# Project specific - Data files
+data/*.json
+data/*.jsonl
+data/*.csv
+# Keep example files
+!data/example_*.jsonl
+!data/example_*.json
+!data/example_output.jsonl
 
 # Temporary files
 *.tmp
 *.temp
+*.bak
+*.backup
+*.swp
 temp/
 tmp/
+cache/
+artifacts/
+
+# Test outputs
+test_output*
+test_optimized_output*
+scrape_output.log
+scrape_summary.md
+validate_output.py
+bandit-report.json
 
 # HTML dumps
 *.html
 
-# Backup files
-*.bak
-*.backup
+# Secrets and credentials
+*.pem
+*.key
+*.crt
+*.cer
+credentials.json
+secrets.json
+config.local.json
+.env.local
+.env.production
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Archives
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# Documentation build
+docs/build/
+docs/_build/
+site/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Package files
+package/
+scraper-package.tar.gz

@@ -43,24 +43,36 @@ pip install -r requirements.txt
 ### Testing
 
 ```bash
-# Quick test with limited data
+# Test optimized scraper (recommended)
+python test_optimized_scraper.py
+
+# Test original scraper
 python test_scraper.py
 
 # Manual test with 5 subjects
-python scraper.py --max-subjects 5 --debug
+python scraper_optimized.py --max-subjects 5 --debug
 ```
 
 ### Basic Usage
 
+#### Optimized Scraper (Recommended)
+
 ```bash
-# Scrape all University Park courses (default)
-python scraper.py
+# Scrape all University Park courses with optimized data structure
+python scraper_optimized.py
 
-# Scrape with custom settings
-python scraper.py --output courses.jsonl --max-workers 20 --rate-limit 30
+# Custom settings with optimized scraper
+python scraper_optimized.py --output courses.jsonl --max-workers 16 --max-detail-workers 50 --rate-limit 20
 
-# Test with limited subjects
-python scraper.py --max-subjects 10 --debug
+# Test mode
+python scraper_optimized.py --max-subjects 10 --debug
+```
+
+#### Original Scraper (Legacy)
+
+```bash
+# Original scraper (larger file sizes, flat structure)
+python scraper.py --output courses_flat.jsonl --max-workers 16 --rate-limit 15
 ```
 
 ### Command Line Options
